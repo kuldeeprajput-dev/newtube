@@ -22,7 +22,7 @@ import {
   SparklesIcon,
   TrashIcon,
 } from "lucide-react";
-import { Suspense, useState } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -166,20 +166,29 @@ const FormSectionSuspense = ({ videoId }: FormSectionProps) => {
       toast.error("Video revalidating failed");
     },
   });
+  const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
+  const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
+  const [isGeneratingThumbnail, setIsGeneratingThumbnail] = useState(false);
+  const [isUploadingThumbnail, setIsUploadingThumbnail] = useState(false);
+  const [isRestoringThumbnail, setIsRestoringThumbnail] = useState(false);
+
   const generateTitle = trpc.videos.generateTitle.useMutation({
     onSuccess: () => {
-      toast.success("Title generating started", {
-        description: "This may take a few minutes.",
+      setIsGeneratingTitle(true);
+      toast.success("Title generation started", {
+        description: "This may take a few seconds.",
       });
     },
     onError: () => {
       toast.error("Title generating failed");
     },
   });
+  
   const generateDescription = trpc.videos.generateDescription.useMutation({
     onSuccess: () => {
-      toast.success("Description generating started", {
-        description: "This may take a few minutes.",
+      setIsGeneratingDescription(true);
+      toast.success("Description generation started", {
+        description: "This may take a few seconds.",
       });
     },
     onError: () => {
@@ -187,8 +196,60 @@ const FormSectionSuspense = ({ videoId }: FormSectionProps) => {
     },
   });
 
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isGeneratingTitle || isGeneratingDescription || isGeneratingThumbnail) {
+      interval = setInterval(() => {
+        utils.studio.getOne.invalidate({ id: videoId });
+      }, 2000);
+    }
+    return () => clearInterval(interval);
+  }, [isGeneratingTitle, isGeneratingDescription, isGeneratingThumbnail, utils.studio.getOne, videoId]);
+
+
+  useEffect(() => {
+    if (isGeneratingTitle) {
+      const timeout = setTimeout(() => {
+        setIsGeneratingTitle(false);
+        toast.error("Title generation timed out. Please try again.");
+      }, 45000);
+      return () => clearTimeout(timeout);
+    }
+  }, [isGeneratingTitle]);
+
+  useEffect(() => {
+    if (isGeneratingDescription) {
+      const timeout = setTimeout(() => {
+        setIsGeneratingDescription(false);
+        toast.error("Description generation timed out. Please try again.");
+      }, 45000);
+      return () => clearTimeout(timeout);
+    }
+  }, [isGeneratingDescription]);
+
+  useEffect(() => {
+    if (isGeneratingThumbnail) {
+      const timeout = setTimeout(() => {
+        setIsGeneratingThumbnail(false);
+        toast.error("Thumbnail generation timed out. Please try again.");
+      }, 45000);
+      return () => clearTimeout(timeout);
+    }
+  }, [isGeneratingThumbnail]);
+
+   useEffect(() => {
+    if (isUploadingThumbnail) {
+      const timeout = setTimeout(() => {
+        setIsUploadingThumbnail(false);
+        toast.error("Thumbnail upload timed out. Please try again.");
+      }, 45000);
+      return () => clearTimeout(timeout);
+    }
+  }, [isUploadingThumbnail]);
+
   const restoreThumbnail = trpc.videos.restoreThumbnail.useMutation({
     onSuccess: () => {
+      setIsRestoringThumbnail(true);
       utils.studio.getMany.invalidate();
       utils.studio.getOne.invalidate({ id: videoId });
       toast.success("Thumbnail restored");
@@ -202,6 +263,33 @@ const FormSectionSuspense = ({ videoId }: FormSectionProps) => {
     resolver: zodResolver(videosUpdateSchema),
     defaultValues: video,
   });
+
+  useEffect(() => {
+    if (isGeneratingTitle && video.title && video.title !== form.getValues("title")) {
+      form.setValue("title", video.title);
+      setIsGeneratingTitle(false);
+      toast.success("Title generated successfully! 🎉");
+    }
+    if (isGeneratingDescription && video.description && video.description !== form.getValues("description")) {
+      form.setValue("description", video.description);
+      setIsGeneratingDescription(false);
+      toast.success("Description generated successfully! 🎉");
+    }
+    if (isGeneratingThumbnail && video.thumbnailUrl && video.thumbnailUrl !== form.getValues("thumbnailUrl")) {
+      form.setValue("thumbnailUrl", video.thumbnailUrl);
+      setIsGeneratingThumbnail(false);
+      toast.success("Thumbnail generated successfully! 🎉");
+    }
+     if (isUploadingThumbnail && video.thumbnailUrl && video.thumbnailUrl !== form.getValues("thumbnailUrl")) {
+      form.setValue("thumbnailUrl", video.thumbnailUrl);
+      setIsUploadingThumbnail(false);
+      toast.success("Thumbnail updated successfully! 🎉");
+    }
+    if (isRestoringThumbnail && video.thumbnailUrl && video.thumbnailUrl !== form.getValues("thumbnailUrl")) {
+      form.setValue("thumbnailUrl", video.thumbnailUrl);
+      setIsRestoringThumbnail(false);
+    }
+  }, [video.title, video.description, video.thumbnailUrl, isGeneratingTitle, isGeneratingDescription, isGeneratingThumbnail, isUploadingThumbnail, isRestoringThumbnail, form]);
 
   const onSubmit = (data: z.infer<typeof videosUpdateSchema>) => {
     update.mutate(data);
@@ -222,6 +310,7 @@ const FormSectionSuspense = ({ videoId }: FormSectionProps) => {
     useState(false);
   const [thumbnailGenerateModalOpen, setThumbnailGenerateModalOpen] =
     useState(false);
+  const [thumbnailDropdownOpen, setThumbnailDropdownOpen] = useState(false);
 
   return (
     <>
@@ -229,11 +318,13 @@ const FormSectionSuspense = ({ videoId }: FormSectionProps) => {
         videoId={videoId}
         open={thumbnailGenerateModalOpen}
         onOpenChange={setThumbnailGenerateModalOpen}
+        onSuccess={() => setIsGeneratingThumbnail(true)}
       />
       <ThumbnailUploadModal
         videoId={videoId}
         open={thumbnailUploadModalOpen}
         onOpenChange={setThumbnailUploadModalOpen}
+        onSuccess={() => setIsUploadingThumbnail(true)}
       />
 
       <Form {...form}>
@@ -291,10 +382,10 @@ const FormSectionSuspense = ({ videoId }: FormSectionProps) => {
                           onClick={() => generateTitle.mutate({ id: videoId })}
                           className="rounded-full size-6 [&_svg]:size-3"
                           disabled={
-                            generateTitle?.isPending || !video.muxTrackId
+                            isGeneratingTitle || !video.muxTrackId
                           }
                         >
-                          {generateTitle?.isPending ? (
+                          {isGeneratingTitle ? (
                             <Loader2Icon className="size-4 animate-spin" />
                           ) : (
                             <SparklesIcon className="size-4" />
@@ -329,10 +420,10 @@ const FormSectionSuspense = ({ videoId }: FormSectionProps) => {
                           }
                           className="rounded-full size-6 [&_svg]:size-3"
                           disabled={
-                            generateDescription?.isPending || !video.muxTrackId
+                            isGeneratingDescription || !video.muxTrackId
                           }
                         >
-                          {generateDescription?.isPending ? (
+                          {isGeneratingDescription ? (
                             <Loader2Icon className="size-4 animate-spin" />
                           ) : (
                             <SparklesIcon className="size-4" />
@@ -367,7 +458,15 @@ const FormSectionSuspense = ({ videoId }: FormSectionProps) => {
                           alt="Thumbnail"
                           className="object-cover"
                         />
-                        <DropdownMenu>
+                        {(isGeneratingThumbnail ||
+                          restoreThumbnail.isPending ||
+                          isUploadingThumbnail ||
+                          isRestoringThumbnail) && (
+                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10">
+                            <Loader2Icon className="size-6 text-white animate-spin" />
+                          </div>
+                        )}
+                        <DropdownMenu open={thumbnailDropdownOpen} onOpenChange={setThumbnailDropdownOpen}>
                           <DropdownMenuTrigger asChild>
                             <Button
                               type="button"
@@ -378,24 +477,29 @@ const FormSectionSuspense = ({ videoId }: FormSectionProps) => {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="start" side="right">
-                            <DropdownMenuItem
-                              onClick={() => setThumbnailUploadModalOpen(true)}
+                            <DropdownMenuItem disabled={isGeneratingThumbnail || isUploadingThumbnail || isRestoringThumbnail || restoreThumbnail.isPending}
+                              onClick={() => {
+                                setThumbnailUploadModalOpen(true);
+                                setThumbnailDropdownOpen(false);
+                              }}
                             >
                               <ImagePlusIcon className="size-4" />
                               Change
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                setThumbnailGenerateModalOpen(true)
-                              }
+                            <DropdownMenuItem disabled={isGeneratingThumbnail || isUploadingThumbnail || isRestoringThumbnail || restoreThumbnail.isPending}
+                              onClick={() => {
+                                setThumbnailGenerateModalOpen(true);
+                                setThumbnailDropdownOpen(false);
+                              }}
                             >
                               <SparkleIcon className="size-4" />
                               AI-Generate
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                restoreThumbnail.mutate({ id: videoId })
-                              }
+                            <DropdownMenuItem disabled={isGeneratingThumbnail || isUploadingThumbnail || isRestoringThumbnail || restoreThumbnail.isPending}
+                              onClick={() => {
+                                restoreThumbnail.mutate({ id: videoId });
+                                setThumbnailDropdownOpen(false);
+                              }}
                             >
                               <RotateCcw className="size-4" />
                               Restore

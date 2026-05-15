@@ -14,11 +14,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { toast } from "sonner";
+import { Loader2Icon, SparklesIcon } from "lucide-react";
 
 interface ThumbnailGenerateModalProps {
   videoId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
 }
 
 const formSchema = z.object({
@@ -29,6 +31,7 @@ export const ThumbnailGenerateModal = ({
   videoId,
   open,
   onOpenChange,
+  onSuccess,
 }: ThumbnailGenerateModalProps) => {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -41,23 +44,31 @@ export const ThumbnailGenerateModal = ({
 
   const generateThumbnail = trpc.videos.generateThumbnail.useMutation({
     onSuccess: () => {
-      toast.success("Background job started", {
-        description: "This may take a few minutes.",
+      toast.success("Thumbnail generation started! 🎨", {
+        description:
+          "Your AI thumbnail is being generated. This may take a minute — we'll update it automatically.",
+        duration: 5000,
       });
+      form.reset();
+      onOpenChange(false);
+      if (onSuccess) {
+        onSuccess();
+      }
     },
-    onError: () => {
-      toast.error("Something went wrong");
+    onError: (error) => {
+      toast.error("Failed to generate thumbnail", {
+        description:
+          error.message || "Something went wrong. Please try again.",
+        duration: 4000,
+      });
     },
   });
 
-
-
-
-
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    generateThumbnail.mutate({ 
+    generateThumbnail.mutate({
       prompt: values.prompt,
-      id: videoId });
+      id: videoId,
+    });
   };
 
   return (
@@ -81,6 +92,7 @@ export const ThumbnailGenerateModal = ({
                   <Textarea
                     rows={6}
                     placeholder="Describe the thumbnail you want to generate"
+                    disabled={generateThumbnail.isPending}
                     {...field}
                   />
                 </FormControl>
@@ -90,7 +102,22 @@ export const ThumbnailGenerateModal = ({
           />
 
           <div className="flex justify-end">
-            <Button type="submit">Generate</Button>
+            <Button
+              type="submit"
+              disabled={generateThumbnail.isPending}
+            >
+              {generateThumbnail.isPending ? (
+                <>
+                  <Loader2Icon className="size-4 animate-spin mr-2" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <SparklesIcon className="size-4 mr-2" />
+                  Generate
+                </>
+              )}
+            </Button>
           </div>
         </form>
       </Form>

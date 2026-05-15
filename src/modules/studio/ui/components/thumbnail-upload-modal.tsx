@@ -6,12 +6,14 @@ interface ThumbnailUploadModalProps {
   videoId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
 }
 
 export const ThumbnailUploadModal = ({
   videoId,
   open,
   onOpenChange,
+  onSuccess,
 }: ThumbnailUploadModalProps) => {
   const utils = trpc.useUtils();
 
@@ -30,6 +32,10 @@ export const ThumbnailUploadModal = ({
         endpoint="thumbnailUploader"
         input={{ videoId }}
         onClientUploadComplete={onUploadComplete}
+        onUploadBegin={() => {
+          onSuccess?.();
+          onOpenChange(false);
+        }}
       />
     </ResponsiveModal>
   );

@@ -12,7 +12,6 @@ interface InputType {
 export const { POST } = serve(async (context) => {
   const { userId, videoId, prompt } = context.requestPayload as InputType;
 
-
   const video = await context.run("get-video", async () => {
     const result = await db
       .select()
@@ -26,42 +25,67 @@ export const { POST } = serve(async (context) => {
     return result[0];
   });
 
-  
+  const transcript = await context.run("get-transcript", async () => {
+    if (!video.muxPlaybackId || !video.muxTrackId) {
+      return "";
+    }
+
+    const trackUrl = `https://stream.mux.com/${video.muxPlaybackId}/text/${video.muxTrackId}.txt`;
+    try {
+      const res = await fetch(trackUrl);
+      if (!res.ok) return "";
+      const text = await res.text();
+      return text.trim();
+    } catch {
+      return "";
+    }
+  });
+
   const thumbnailUrl = await context.run("generate-thumbnail", async () => {
+    const transcriptContext = transcript
+      ? `\nContext from video transcript: ${transcript.slice(0, 1000)}...`
+      : "";
+
     const enhancedPrompt = `
 YouTube thumbnail, ultra high quality, cinematic lighting,
 bold colors, expressive face, clean background,
-large readable text, professional YouTube style.
-Prompt: ${prompt}
+large readable text, professional YouTube style,
+landscape orientation, 16:9 aspect ratio, wide format.
+Prompt: ${prompt}${transcriptContext}
     `.trim();
 
-    const res = await fetch("https://openrouter.ai/api/v1/images/generations", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
+    const res = await fetch(
+      "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.HUGGINGFACE_ACCESS_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          inputs: enhancedPrompt,
+          parameters: {
+            width: 1280,
+            height: 720,
+          },
+        }),
       },
-      body: JSON.stringify({
-        model: "stabilityai/stable-diffusion-xl-base-1.0",
-        prompt: enhancedPrompt,
-        size: "1280x720", 
-      }),
-    });
+    );
 
     if (!res.ok) {
       console.error("Image generation failed:", await res.text());
       throw new Error("Thumbnail generation failed");
     }
 
-    const data = await res.json();
-    return data?.data?.[0]?.url;
+    const imageBuffer = await res.arrayBuffer();
+    const base64 = Buffer.from(imageBuffer).toString("base64");
+    return `data:image/png;base64,${base64}`;
   });
 
   if (!thumbnailUrl) {
     throw new Error("No thumbnail generated");
   }
 
-  
   await context.run("update-video", async () => {
     await db
       .update(videos)
