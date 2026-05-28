@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { LogOutIcon, VideoIcon } from "lucide-react";
 import { usePathname } from "next/navigation";
+import { trpc } from "@/trpc/client";
 import {
   Sidebar,
   SidebarContent,
@@ -15,6 +16,8 @@ import { StudioSidebarHeader } from "./studio-sidebar-header";
 
 export const StudioSidebar = () => {
   const pathname = usePathname();
+  const utils = trpc.useUtils();
+
   return (
     <Sidebar
       className="pt-16 z-40  border-r border-gray-300/40 "
@@ -35,6 +38,7 @@ export const StudioSidebar = () => {
                   prefetch
                   href="/studio"
                   className="flex items-center gap-2"
+                  onClick={() => utils.studio.getMany.invalidate()}
                 >
                   <VideoIcon className="size-5" />
                   <span className="text-sm">Content</span>
@@ -44,7 +48,12 @@ export const StudioSidebar = () => {
             <Separator />
             <SidebarMenuItem>
               <SidebarMenuButton tooltip="Exit Studio" asChild>
-                <Link prefetch href="/" className="flex items-center gap-2">
+                <Link
+                  prefetch
+                  href="/"
+                  className="flex items-center gap-2"
+                  onClick={() => utils.videos.invalidate()}
+                >
                   <LogOutIcon className="size-5" />
                   <span className="text-sm">Exit Studio</span>
                 </Link>

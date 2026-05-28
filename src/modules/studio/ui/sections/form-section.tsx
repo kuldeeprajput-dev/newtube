@@ -206,6 +206,17 @@ const FormSectionSuspense = ({ videoId }: FormSectionProps) => {
     return () => clearInterval(interval);
   }, [isGeneratingTitle, isGeneratingDescription, isGeneratingThumbnail, utils.studio.getOne, videoId]);
 
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (video.muxStatus !== "ready" && video.muxStatus !== "errored") {
+      interval = setInterval(() => {
+        utils.studio.getOne.invalidate({ id: videoId });
+        utils.studio.getMany.invalidate();
+      }, 5000);
+    }
+    return () => clearInterval(interval);
+  }, [video.muxStatus, videoId, utils]);
+
 
   useEffect(() => {
     if (isGeneratingTitle) {
