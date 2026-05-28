@@ -8,7 +8,7 @@ import {
 } from "@/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/trpc/init";
 import { TRPCError } from "@trpc/server";
-import { eq, and, or, lt, desc, getTableColumns } from "drizzle-orm";
+import { eq, and, or, lt, desc, getTableColumns, ne, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 
 export const studioRouter = createTRPCRouter({
@@ -64,6 +64,8 @@ export const studioRouter = createTRPCRouter({
         .where(
           and(
             eq(videos.userId, userId),
+            isNotNull(videos.muxStatus),
+            ne(videos.muxStatus, "waiting"),
             cursor
               ? or(
                   lt(videos.updatedAt, cursor.updatedAt),
